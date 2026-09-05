@@ -1,0 +1,5 @@
+*.swp
+.DS_Store
+
+# Source screenshot; preview.jpg is the one the README and store card use.
+preview.png

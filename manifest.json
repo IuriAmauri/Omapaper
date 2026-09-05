@@ -1,0 +1,42 @@
+{
+  "schemaVersion": 1,
+  "id": "omapaper",
+  "name": "Omapaper",
+  "version": "1.0.0",
+  "author": "Iuri",
+  "license": "MIT",
+  "homepage": "https://github.com/IuriAmauri/Omapaper",
+  "description": "Browse, cycle, and set backgrounds from every Omarchy theme, not just the active one",
+  "kinds": [
+    "bar-widget"
+  ],
+  "entryPoints": {
+    "barWidget": "Widget.qml"
+  },
+  "barWidget": {
+    "displayName": "Omapaper",
+    "description": "Left-click browses every theme's wallpapers, right-click steps to the next.",
+    "category": "Appearance",
+    "defaultSection": "right",
+    "allowMultiple": false,
+    "aliases": [
+      "wallpaper",
+      "wallpapers",
+      "background",
+      "backgrounds",
+      "omapaper"
+    ],
+    "defaults": {
+      "keybind": "SUPER + CTRL + ALT + SPACE"
+    },
+    "schema": [
+      {
+        "key": "keybind",
+        "type": "string",
+        "label": "Keyboard shortcut",
+        "description": "Global shortcut that opens the picker. Set it to nothing to run with no shortcut. If the combination is already bound to something else, Omapaper leaves it alone and says so.",
+        "defaultValue": "SUPER + CTRL + ALT + SPACE"
+      }
+    ]
+  }
+}

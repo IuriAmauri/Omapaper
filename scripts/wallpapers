@@ -1,0 +1,176 @@
+#!/bin/bash
+
+# Browse, cycle, and set backgrounds across every Omarchy theme.
+set -euo pipefail
+
+OMARCHY_PATH="${OMARCHY_PATH:-/usr/share/omarchy}"
+STAGE="${XDG_CACHE_HOME:-$HOME/.cache}/omarchy/all-backgrounds"
+CURRENT="$HOME/.local/state/omarchy/current/background"
+SELF=$(readlink -f "${BASH_SOURCE[0]}")
+
+KEYBIND_DESCRIPTION="Background Switcher (all themes)"
+
+stage() {
+  local dir theme img ext stem display target n
+
+  rm -rf "$STAGE"
+  mkdir -p "$STAGE"
+
+  for dir in "$OMARCHY_PATH"/themes/*/backgrounds "$HOME"/.config/omarchy/backgrounds/*; do
+    [[ -d $dir ]] || continue
+
+    if [[ $dir == */backgrounds ]]; then
+      theme=$(basename "$(dirname "$dir")")
+    else
+      theme=$(basename "$dir")
+    fi
+
+    for img in "$dir"/*; do
+      [[ -f $img ]] || continue
+      case "${img,,}" in
+        *.jpg | *.jpeg | *.png | *.gif | *.bmp | *.webp) ;;
+        *) continue ;;
+      esac
+
+      ext="${img##*.}"
+
+      stem=$(basename "$img")
+      stem="${stem%.*}"
+      stem="${stem#[0-9]-}"
+      stem="${stem#[0-9][0-9]-}"
+
+      if [[ ${stem,,} == "${theme,,}" ]]; then
+        display="$theme"
+      else
+        display="$theme $stem"
+      fi
+
+      target="$STAGE/$display.$ext"
+
+      n=2
+      while [[ -e $target ]]; do
+        target="$STAGE/$display $n.$ext"
+        ((n++))
+      done
+
+      ln -s "$img" "$target"
+    done
+  done
+}
+
+staged_list() {
+  find -L "$STAGE" -maxdepth 1 -type f -print0 2>/dev/null | sort -z
+}
+
+current_staged() {
+  local current size img
+
+  current=$(readlink -f "$CURRENT" 2>/dev/null) || return 0
+  [[ -f $current ]] || return 0
+  size=$(stat -Lc %s "$current" 2>/dev/null) || return 0
+
+  while IFS= read -r -d '' img; do
+    [[ $(stat -Lc %s "$img" 2>/dev/null) == "$size" ]] || continue
+    if cmp -s "$img" "$current"; then
+      printf '%s' "$img"
+      return 0
+    fi
+  done < <(staged_list)
+}
+
+next() {
+  local -a images
+  local selected index=-1 i
+
+  mapfile -d '' -t images < <(staged_list)
+  if ((${#images[@]} == 0)); then
+    omarchy-notification-send "No backgrounds found" -t 2000
+    return 0
+  fi
+
+  selected=$(current_staged)
+  for i in "${!images[@]}"; do
+    [[ ${images[$i]} == "$selected" ]] && index=$i && break
+  done
+
+  if ((index == -1)); then
+    index=0
+  else
+    index=$(((index + 1) % ${#images[@]}))
+  fi
+
+  omarchy-theme-bg-set "${images[$index]}"
+}
+
+keybind_modmask() {
+  local keys="${1^^}" mask=0
+
+  [[ $keys == *SUPER* ]] && ((mask += 64))
+  [[ $keys == *ALT* ]] && ((mask += 8))
+  [[ $keys == *CTRL* || $keys == *CONTROL* ]] && ((mask += 4))
+  [[ $keys == *SHIFT* ]] && ((mask += 1))
+  printf '%s' "$mask"
+}
+
+keybind_key() {
+  local key="${1##*+}"
+
+  key="${key#"${key%%[![:space:]]*}"}"
+  key="${key%"${key##*[![:space:]]}"}"
+  printf '%s' "$key"
+}
+
+# Register the shortcut
+bind() {
+  local keys="${1:-}" mask key owner lua
+
+  [[ -n $keys ]] || return 0
+  command -v hyprctl >/dev/null 2>&1 || return 0
+
+  mask=$(keybind_modmask "$keys")
+  key=$(keybind_key "$keys")
+  owner=$(hyprctl binds -j 2>/dev/null |
+    jq -r --argjson m "$mask" --arg k "$key" '
+      map(select(.modmask == $m and (.key | ascii_downcase) == ($k | ascii_downcase)))
+      | .[0].description // ""
+    ' 2>/dev/null) || owner=""
+
+  if [[ -n $owner && $owner != "$KEYBIND_DESCRIPTION" ]]; then
+    omarchy-notification-send "Omapaper shortcut not set" \
+      "$keys is already bound to: $owner" -t 4000
+    return 0
+  fi
+
+  lua=$(printf 'hl.unbind("%s"); hl.bind("%s", hl.dsp.exec_cmd("\\"%s\\" pick"), {description="%s"})' \
+    "$keys" "$keys" "$SELF" "$KEYBIND_DESCRIPTION")
+  hyprctl eval "$lua" >/dev/null 2>&1 || true
+}
+
+pick() {
+  local selection
+
+  selection=$(omarchy-menu-images --filterable --show-labels \
+    --selected "$(current_staged)" "$STAGE")
+  [[ -n $selection ]] && omarchy-theme-bg-set "$selection"
+  return 0
+}
+
+case "${1:-pick}" in
+  pick)
+    stage
+    pick
+    ;;
+  next)
+    stage
+    next
+    ;;
+  bind) bind "${2:-}" ;;
+  warm)
+    stage
+    omarchy-menu-images --cache-only "$STAGE"
+    ;;
+  *)
+    echo "Usage: wallpapers [pick|next|bind <keys>|warm]" >&2
+    exit 1
+    ;;
+esac
