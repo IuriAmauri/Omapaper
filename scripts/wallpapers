@@ -7,19 +7,34 @@ OMARCHY_PATH="${OMARCHY_PATH:-/usr/share/omarchy}"
 STAGE="${XDG_CACHE_HOME:-$HOME/.cache}/omarchy/all-backgrounds"
 CURRENT="$HOME/.local/state/omarchy/current/background"
 SELF=$(readlink -f "${BASH_SOURCE[0]}")
+SHELL_JSON="$HOME/.config/omarchy/shell.json"
 
 KEYBIND_DESCRIPTION="Background Switcher (all themes)"
 
+extra_folder() {
+  local folder
+
+  [[ -f $SHELL_JSON ]] || return 0
+  folder=$(jq -r '
+    [.bar.layout[]?[]? | select((.id // "") | endswith("omapaper")) | .folder // ""]
+    | first // ""
+  ' "$SHELL_JSON" 2>/dev/null) || return 0
+
+  [[ -n $folder && $folder != "null" ]] || return 0
+  printf '%s' "${folder/#\~/$HOME}"
+}
+
 stage() {
-  local dir theme img ext stem display target n
+  local dir theme img ext stem display target n extra
 
   rm -rf "$STAGE"
   mkdir -p "$STAGE"
+  extra=$(extra_folder)
 
-  for dir in "$OMARCHY_PATH"/themes/*/backgrounds "$HOME"/.config/omarchy/backgrounds/*; do
+  for dir in "$OMARCHY_PATH"/themes/*/backgrounds "$HOME"/.config/omarchy/backgrounds/* "$extra"; do
     [[ -d $dir ]] || continue
 
-    if [[ $dir == */backgrounds ]]; then
+    if [[ $dir != "$extra" && $dir == */backgrounds ]]; then
       theme=$(basename "$(dirname "$dir")")
     else
       theme=$(basename "$dir")
@@ -146,6 +161,10 @@ bind() {
   hyprctl eval "$lua" >/dev/null 2>&1 || true
 }
 
+settings() {
+  omarchy-launch-config-editor "$SHELL_JSON"
+}
+
 pick() {
   local selection
 
@@ -164,13 +183,14 @@ case "${1:-pick}" in
     stage
     next
     ;;
+  settings) settings ;;
   bind) bind "${2:-}" ;;
   warm)
     stage
     omarchy-menu-images --cache-only "$STAGE"
     ;;
   *)
-    echo "Usage: wallpapers [pick|next|bind <keys>|warm]" >&2
+    echo "Usage: wallpapers [pick|next|settings|bind <keys>|warm]" >&2
     exit 1
     ;;
 esac

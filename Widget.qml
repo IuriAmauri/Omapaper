@@ -55,10 +55,12 @@ BarWidget {
     bar: root.bar
     text: "󰋩"
     active: proc.running
-    tooltipText: "Wallpapers — click to browse · right-click for next"
+    tooltipText: "Wallpapers — click to browse · middle-click for next · right-click for settings"
 
     onPressed: function(b) {
-      root.run(b === Qt.RightButton ? "next" : "pick")
+      if (b === Qt.RightButton) root.run("settings")
+      else if (b === Qt.MiddleButton) root.run("next")
+      else root.run("pick")
     }
   }
 }
